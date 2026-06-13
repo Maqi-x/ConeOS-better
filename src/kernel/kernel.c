@@ -1,5 +1,6 @@
 #include "../../limine/limine.h"
 #include "../cpu/idt.h"
+#include "../cpu/irq.h"
 #include "../drivers/framebuffer.h"
 #include "../drivers/pic.h"
 #include "../drivers/serial.h"
@@ -13,8 +14,8 @@ LIMINE_BASE_REVISION(6);
 void kmain(void) {
   print_serial("start kernel\n");
   pic_remap();
-  pic_init_masks();
   load_idt();
+  irq_init();
 
   struct limine_framebuffer *fb = framebuffer_get();
   if (fb == NULL) {
