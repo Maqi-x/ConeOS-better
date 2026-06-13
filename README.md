@@ -1,1 +1,1 @@
-A hobby x86-64 operating system kernel with the **GRUB** bootloader
+A hobby i386 operating system kernel with the **GRUB** bootloader

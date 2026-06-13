@@ -1,60 +1,52 @@
-CC = gcc
-LD = ld
+CC   ?= gcc
+NASM ?= nasm
+LD   ?= ld
+QEMU ?= qemu-system-i386
 
-CFLAGS = -Wall -Wextra -O2 -pipe -m64 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -mcmodel=kernel
-LDFLAGS = -m elf_x86_64 -nostdlib -static -T linker.ld -z max-page-size=0x1000
+SRC_DIR   := src/
+BUILD_DIR ?= build/
+ISO_DIR   ?= iso/
 
-OBJS = build/kernel/kernel.o \
-       build/drivers/serial.o \
-       build/drivers/framebuffer.o \
-	   build/drivers/pic.o \
-	   build/cpu/idt.o \
-	   build/cpu/irq.o \
-       build/gfx/draw.o
+CFLAGS  := -Wall -Wextra -O2 -pipe -m32 -ffreestanding -fno-stack-protector \
+		   -fno-stack-check -fno-lto -mno-80387 -mno-mmx -mno-sse -mno-sse2 \
+		   -I$(SRC_DIR)
 
-.PHONY: all clean run iso fmt
+LDFLAGS := -m elf_i386 -nostdlib -static -T linker.ld
 
+rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
+
+SRCS_C   := $(call rwildcard,$(SRC_DIR),*.c)
+SRCS_ASM := $(call rwildcard,$(SRC_DIR),*.asm)
+
+OBJS     := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS_C)) \
+            $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.o,$(SRCS_ASM))
+
+.PHONY: all clean run iso
 all: iso
 
-build/cpu/irq.o: src/cpu/irq.c
+$(BUILD_DIR)/boot/boot.o: src/boot/boot.asm
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -mgeneral-regs-only -c $< -o $@
+	$(NASM) -f elf32 $< -o $@
 
-build/%.o: src/%.c
+$(BUILD_DIR)/cpu/irq.o: src/cpu/irq.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/%.o: src/%.asm
+$(BUILD_DIR)/%.o: src/%.c
 	@mkdir -p $(dir $@)
-	$(AS) -f elf64 $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
-iso_root/boot/kernel.elf: $(OBJS)
-	@mkdir -p iso_root/boot
+$(ISO_DIR)/boot/kernel.elf: $(OBJS)
+	@mkdir -p $(ISO_DIR)/boot
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
-limine/limine:
-	make -C limine
-
-iso: iso_root/boot/kernel.elf limine/limine limine.conf
-	@mkdir -p iso_root/boot/limine
-	@mkdir -p iso_root/EFI/BOOT
-	cp limine.conf iso_root/boot/limine/
-	cp limine/BOOTX64.EFI iso_root/EFI/BOOT/
-	cp limine/BOOTIA32.EFI iso_root/EFI/BOOT/
-	cp limine/limine-bios.sys limine/limine-bios-cd.bin limine/limine-uefi-cd.bin iso_root/boot/limine/
-	xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
-		-no-emul-boot -boot-load-size 4 -boot-info-table \
-		--efi-boot boot/limine/limine-uefi-cd.bin \
-		-efi-boot-part --efi-boot-image --protective-msdos-label \
-		iso_root -o ConeOS.iso
-	./limine/limine bios-install ConeOS.iso
+iso: $(ISO_DIR)/boot/kernel.elf grub.cfg
+	@mkdir -p $(ISO_DIR)/boot/grub
+	cp grub.cfg $(ISO_DIR)/boot/grub/
+	grub-mkrescue -o ConeOS.iso $(ISO_DIR)
 
 run: iso
-	qemu-system-x86_64 -M q35 -m 2G -cdrom ConeOS.iso -boot d
-
-fmt:
-	find src -name '*.c' -o -name '*.h' | xargs clang-format -i
+	$(QEMU) -m 2G -cdrom ConeOS.iso -boot d -serial stdio
 
 clean:
-	rm -rf build iso_root/boot/kernel.elf ConeOS.iso
-	make -C limine clean
+	rm -rf $(BUILD_DIR) $(ISO_DIR) ConeOS.iso

@@ -1,8 +1,13 @@
-ENTRY(kmain)
+ENTRY(_start)
 
 SECTIONS
 {
-    . = 0xffffffff80100000;
+    /* Link the kernel at 1MB */
+    . = 1M;
+
+    .multiboot_header : {
+        KEEP(*(.multiboot_header))
+    }
 
     .text : {
         *(.text*)
@@ -14,10 +19,10 @@ SECTIONS
 
     .data : {
         *(.data*)
-        KEEP(*(.limine_reqs*))
     }
 
     .bss : {
         *(.bss*)
+        *(COMMON)
     }
 }
