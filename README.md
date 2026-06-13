@@ -1,1 +1,1 @@
-A hobby x86-64 operating system kernel with Limine bootloader
+A hobby x86-64 operating system kernel with the **GRUB** bootloader
